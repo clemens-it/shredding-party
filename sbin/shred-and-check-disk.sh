@@ -16,7 +16,27 @@ rot=$(lsblk --nodeps -no rota "$dev" | sed -Ee 's/\s//g')
 # Get info whether disk security is frozen
 frozen=$(hdparm -I "$dev" | grep frozen | sed -Ee 's/\s+//g')
 if [ "$frozen" != "notfrozen" ]; then
-	echo -e "Disk security security is frozen. Try to suspend to memory to unfreeze.\n"
+	echo -e "Disk security security is frozen on device $dev. Abort and try to supend the system to unfreeze.\n"
+	echo -e "Hit enter to proceed with classic shredding mthods or press Ctrl+C to abort.\n"
+	echo -e "\nWARNING!!!\n"
+	echo -e "This will destroy all the data on block device $dev\n"
+	read -p "Hit Enter to continue. Press Ctrl+C to abort."
+
+	if [ "$rot" = "1" ]; then
+		echo "Rotatory device. Classic shredding"
+		dd_rescue -4 /dev/urandom -M "$dev"
+	else
+		echo "Non rotatory i.e. Solid State Device"
+		echo "Running secure blkdiscard"
+		blkdiscard -v -f --secure "$dev"
+		if [ $? -ne 0 ]; then
+			#fallback to unsecure discard
+			echo Falling back to unsecure blkdiscard
+			blkdiscard -v -f "$dev"
+		fi
+		echo Zeroing out disk
+		blkdiscard -v -f --zeroout "$dev"
+	fi
 	exit 7
 fi
 
@@ -58,22 +78,6 @@ else
 	echo -e "Checking status - should be 'not enabled'\n"
 	hdparm -I "$dev" | grep enabled
 	echo -e "\n"
-fi
-
-
-if [ "$rot" = "1" ]; then
-	echo "Rotatory device. Classic shredding"
-	dd_rescue -4 /dev/urandom -M "$dev"
-else
-	echo "Non rotatory i.e. Solid State Device"
-	echo "Running secure blkdiscard"
-	blkdiscard -v -f --secure "$dev"
-	if [ $? -ne 0 ]; then
-		#fallback to unsecure discard
-		echo Falling back to unsecure blkdiscard
-		blkdiscard -v -f "$dev"
-	fi
-	#echo blkdiscard -v -f --zeroout "$dev"
 fi
 
 date
